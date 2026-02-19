@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package helios.v1;
+
+// Canonical envelope for any on-chain event emitted into the commit log.
+//
+// Design goals:
+// - Stable keys for idempotency (event_id)
+// - Supports forks/finality (status + slot + parent_slot)
+// - Easy replay (all required context in the payload)
+// - Schema-evolvable (new fields are optional; old fields never repurposed)
+
+enum CommitmentStatus {
+  COMMITMENT_STATUS_UNSPECIFIED = 0;
+  PROCESSED = 1;
+  CONFIRMED = 2;
+  FINALIZED = 3;
+}
+
+message EventKey {
+  string cluster = 1;               // e.g. mainnet-beta, devnet
+  uint64 slot = 2;
+  uint64 parent_slot = 3;
+  string signature = 4;             // tx signature (base58)
+  uint32 tx_index = 5;              // transaction index within block
+  uint32 ix_index = 6;              // outer instruction index
+  uint32 inner_index = 7;           // inner instruction index (0 if none)
+  uint32 log_index = 8;             // program log line index (0 if none)
+  uint64 write_version = 9;         // account write version / monotonic where available
+}
+
+message EventEnvelope {
+  // 32 bytes of stable identity (typically sha256(EventKey canonical serialization)).
+  // Stored as bytes instead of string to avoid encoding ambiguity.
+  bytes event_id = 1;
+  EventKey key = 2;
+
+  CommitmentStatus status = 3;
+  uint64 block_time_unix_ms = 4;
+
+  // Source metadata (for debugging/quality scoring).
+  string source = 5;                // geyser_grpc://validatorX or rpc_ws://...
+  uint64 source_seq = 6;            // monotonically increasing per source connection
+
+  // Raw event payload as opaque bytes. In production this is usually protobuf/flatbuffer.
+  bytes payload = 7;
+
+  // Optional: a fast path for filtering without decoding payload.
+  string program_id = 8;
+  repeated string account_keys = 9;
+}

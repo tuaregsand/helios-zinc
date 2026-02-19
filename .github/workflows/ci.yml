@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  rust-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust fmt check
+        run: |
+          cargo fmt --manifest-path services/gateway-rs/Cargo.toml -- --check
+          cargo fmt --manifest-path services/decoder-rs/Cargo.toml -- --check
+
+      - name: Rust clippy
+        run: |
+          cargo clippy --manifest-path services/gateway-rs/Cargo.toml -- -D warnings
+          cargo clippy --manifest-path services/decoder-rs/Cargo.toml -- -D warnings
+
+  go-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Go fmt check
+        run: |
+          UNFORMATTED=$(gofmt -l services/api-go services/replay-go)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "Go files need formatting:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: Go test api-go
+        run: |
+          cd services/api-go
+          go test ./...
+
+      - name: Go test replay-go
+        run: |
+          cd services/replay-go
+          go test ./...
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Rust dependency audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --manifest-path services/gateway-rs/Cargo.toml
+          cargo audit --manifest-path services/decoder-rs/Cargo.toml
+
+      - name: Go dependency audit
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd services/api-go
+          "$(go env GOPATH)"/bin/govulncheck ./...
+          cd ../replay-go
+          "$(go env GOPATH)"/bin/govulncheck ./...

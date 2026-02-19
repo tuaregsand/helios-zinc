@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Helios Control Surface</title>
+  <style>
+    :root {
+      --bg-a: #e8f3ff;
+      --bg-b: #f8f5ef;
+      --card: #ffffffcc;
+      --ink: #1a2433;
+      --muted: #56657a;
+      --accent: #0f8b8d;
+      --accent-2: #f25f5c;
+      --line: #d3dfec;
+      --ok: #2a9d8f;
+      --warn: #e76f51;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "Avenir Next", "Helvetica Neue", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(1200px 500px at -10% -20%, #d9efff 0%, transparent 70%),
+        radial-gradient(1200px 500px at 120% -10%, #ffe8df 0%, transparent 70%),
+        linear-gradient(135deg, var(--bg-a), var(--bg-b));
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 20px 40px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .title {
+      margin: 0;
+      font-size: clamp(1.7rem, 3.6vw, 2.8rem);
+      letter-spacing: -0.03em;
+    }
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.98rem;
+      max-width: 76ch;
+    }
+    .panel {
+      backdrop-filter: blur(7px);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 22px rgba(31, 55, 92, 0.06);
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .input {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 10px;
+      padding: 11px 12px;
+      font: inherit;
+      color: var(--ink);
+      outline: none;
+    }
+    .input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px #0f8b8d26;
+    }
+    .btn {
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-weight: 700;
+      font: inherit;
+      cursor: pointer;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), #136f75);
+      transition: transform 120ms ease;
+    }
+    .btn.alt {
+      background: linear-gradient(135deg, var(--accent-2), #da4f4c);
+    }
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+    .stats {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      background: #fff;
+    }
+    .stat kbd {
+      display: inline-block;
+      font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-bottom: 5px;
+      background: #f5f8fc;
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid #e2e9f3;
+    }
+    .stat strong {
+      display: block;
+      font-size: 1.35rem;
+      letter-spacing: -0.02em;
+    }
+    .grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+      color: var(--muted);
+      letter-spacing: 0.01em;
+      text-transform: uppercase;
+    }
+    pre {
+      margin: 0;
+      max-height: 380px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      background: #0f172214;
+      color: #1f2f43;
+      font: 0.84rem/1.45 "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+    }
+    .status {
+      margin-top: 8px;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+    .status .ok {
+      color: var(--ok);
+      font-weight: 700;
+    }
+    .status .warn {
+      color: var(--warn);
+      font-weight: 700;
+    }
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      .controls {
+        grid-template-columns: 1fr;
+      }
+      .stats {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1 class="title">Helios Control Surface</h1>
+      <p class="subtitle">Read-only operational view for replay jobs and finality watermarks. This UI uses the same auth path as the public API and can be shared in demos without exposing internal tooling.</p>
+    </section>
+
+    <section class="panel">
+      <div class="controls">
+        <input id="apiKey" class="input" type="password" placeholder="API key (X-API-Key header)" />
+        <button id="saveKey" class="btn" type="button">Save Key</button>
+        <button id="refresh" class="btn alt" type="button">Refresh</button>
+      </div>
+      <div class="stats">
+        <article class="stat"><kbd>health</kbd><strong id="healthValue">-</strong></article>
+        <article class="stat"><kbd>watermarks</kbd><strong id="wmCount">0</strong></article>
+        <article class="stat"><kbd>replay jobs</kbd><strong id="jobCount">0</strong></article>
+      </div>
+      <div class="status" id="status">Idle.</div>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>Finality Watermarks</h2>
+        <pre id="wmJson">[]</pre>
+      </article>
+      <article class="panel">
+        <h2>Replay Jobs</h2>
+        <pre id="jobsJson">[]</pre>
+      </article>
+    </section>
+  </div>
+
+  <script>
+    const keyInput = document.getElementById("apiKey");
+    const saveKeyBtn = document.getElementById("saveKey");
+    const refreshBtn = document.getElementById("refresh");
+    const statusEl = document.getElementById("status");
+    const healthEl = document.getElementById("healthValue");
+    const wmCountEl = document.getElementById("wmCount");
+    const jobCountEl = document.getElementById("jobCount");
+    const wmJsonEl = document.getElementById("wmJson");
+    const jobsJsonEl = document.getElementById("jobsJson");
+
+    keyInput.value = localStorage.getItem("helios_api_key") || "";
+
+    saveKeyBtn.addEventListener("click", () => {
+      localStorage.setItem("helios_api_key", keyInput.value.trim());
+      statusEl.innerHTML = "<span class='ok'>API key saved.</span>";
+    });
+
+    refreshBtn.addEventListener("click", () => refreshAll());
+
+    function authHeaders() {
+      const key = keyInput.value.trim();
+      if (!key) {
+        return { Accept: "application/json" };
+      }
+      return { Accept: "application/json", "X-API-Key": key };
+    }
+
+    async function fetchJSON(path) {
+      const res = await fetch(path, { headers: authHeaders() });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`${path}: ${res.status} ${text}`);
+      }
+      return res.json();
+    }
+
+    async function refreshAll() {
+      statusEl.textContent = "Refreshing…";
+      try {
+        const healthRes = await fetch("/healthz", { headers: { Accept: "text/plain" } });
+        healthEl.innerHTML = healthRes.ok ? "<span class='ok'>ok</span>" : "<span class='warn'>down</span>";
+
+        const [watermarks, jobs] = await Promise.all([
+          fetchJSON("/v1/watermarks"),
+          fetchJSON("/v1/replay/jobs")
+        ]);
+
+        wmCountEl.textContent = String(watermarks.length || 0);
+        jobCountEl.textContent = String(jobs.length || 0);
+        wmJsonEl.textContent = JSON.stringify(watermarks, null, 2);
+        jobsJsonEl.textContent = JSON.stringify(jobs, null, 2);
+        statusEl.innerHTML = "<span class='ok'>Data refreshed successfully.</span>";
+      } catch (err) {
+        statusEl.innerHTML = `<span class='warn'>${String(err.message || err)}</span>`;
+      }
+    }
+
+    refreshAll();
+  </script>
+</body>
+</html>

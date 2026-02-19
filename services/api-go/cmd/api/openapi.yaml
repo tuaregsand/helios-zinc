@@ -1,0 +1,135 @@
+openapi: 3.0.3
+info:
+  title: Helios Control Plane API
+  version: 1.0.0
+  description: |
+    Read-only operational API for Helios ingestion/replay metadata.
+    The OpenAPI spec itself is served through the same protected middleware chain.
+servers:
+  - url: /
+paths:
+  /openapi.yaml:
+    get:
+      summary: Retrieve this OpenAPI specification
+      security:
+        - ApiKeyHeader: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OpenAPI document
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /v1/watermarks:
+    get:
+      summary: List finality watermarks
+      security:
+        - ApiKeyHeader: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Watermark list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Watermark"
+        "401":
+          description: Unauthorized
+        "429":
+          description: Rate limited
+  /v1/replay/jobs:
+    get:
+      summary: List recent replay jobs
+      security:
+        - ApiKeyHeader: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Replay jobs list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReplayJob"
+        "401":
+          description: Unauthorized
+        "429":
+          description: Rate limited
+components:
+  securitySchemes:
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API key
+  schemas:
+    Watermark:
+      type: object
+      required:
+        - cluster
+        - status
+        - slot
+        - updated_at
+      properties:
+        cluster:
+          type: string
+          example: mainnet-beta
+        status:
+          type: string
+          enum:
+            - processed
+            - confirmed
+            - finalized
+        slot:
+          type: integer
+          format: int64
+          example: 321991122
+        updated_at:
+          type: string
+          format: date-time
+    ReplayJob:
+      type: object
+      required:
+        - job_id
+        - cluster
+        - slot_start
+        - slot_end
+        - status
+        - created_at
+        - updated_at
+        - error
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        cluster:
+          type: string
+          example: mainnet-beta
+        slot_start:
+          type: integer
+          format: int64
+        slot_end:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - failed
+            - done
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        error:
+          type: string
