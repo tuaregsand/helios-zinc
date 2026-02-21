@@ -3,17 +3,49 @@ info:
   title: Helios Control Plane API
   version: 1.0.0
   description: |
-    Read-only operational API for Helios ingestion/replay metadata.
-    The OpenAPI spec itself is served through the same protected middleware chain.
+    Read-only operational API for Helios ingestion and replay metadata.
+    All `/v1` endpoints require auth and are rate limited.
 servers:
   - url: /
 paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Service process is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /readyz:
+    get:
+      summary: Readiness probe
+      security: []
+      responses:
+        "200":
+          description: Service dependencies are healthy
+        "503":
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /openapi.yaml:
     get:
       summary: Retrieve this OpenAPI specification
       security:
         - ApiKeyHeader: []
-        - BearerAuth: []
+        - BearerJwt: []
+        - ApiKeyHeader: []
+          OpenAPIToken: []
+        - BearerJwt: []
+          OpenAPIToken: []
       responses:
         "200":
           description: OpenAPI document
@@ -21,12 +53,45 @@ paths:
             application/yaml:
               schema:
                 type: string
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /v1/watermarks:
     get:
       summary: List finality watermarks
       security:
         - ApiKeyHeader: []
-        - BearerAuth: []
+        - BearerJwt: []
+      parameters:
+        - in: query
+          name: cluster
+          schema:
+            type: string
+          description: Optional cluster filter (token-safe, max 64 chars).
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum:
+              - processed
+              - confirmed
+              - finalized
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 500
       responses:
         "200":
           description: Watermark list
@@ -38,14 +103,56 @@ paths:
                   $ref: "#/components/schemas/Watermark"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "400":
+          description: Invalid query parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "429":
           description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /v1/replay/jobs:
     get:
       summary: List recent replay jobs
       security:
         - ApiKeyHeader: []
-        - BearerAuth: []
+        - BearerJwt: []
+      parameters:
+        - in: query
+          name: cluster
+          schema:
+            type: string
+          description: Optional cluster filter (token-safe, max 64 chars).
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum:
+              - queued
+              - running
+              - failed
+              - done
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Replay jobs list
@@ -57,19 +164,63 @@ paths:
                   $ref: "#/components/schemas/ReplayJob"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "400":
+          description: Invalid query parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "429":
           description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 components:
   securitySchemes:
     ApiKeyHeader:
       type: apiKey
       in: header
       name: X-API-Key
-    BearerAuth:
+    BearerJwt:
       type: http
       scheme: bearer
-      bearerFormat: API key
+      bearerFormat: JWT
+    OpenAPIToken:
+      type: apiKey
+      in: header
+      name: X-OpenAPI-Token
   schemas:
+    ErrorEnvelope:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              example: unauthorized
+            message:
+              type: string
+              example: unauthorized
+            request_id:
+              type: string
+              example: cfd4e1e5ddf4/P6S4PjvS6D-000001
     Watermark:
       type: object
       required:

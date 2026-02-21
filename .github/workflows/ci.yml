@@ -28,6 +28,11 @@ jobs:
           cargo clippy --manifest-path services/gateway-rs/Cargo.toml -- -D warnings
           cargo clippy --manifest-path services/decoder-rs/Cargo.toml -- -D warnings
 
+      - name: Rust test
+        run: |
+          cargo test --manifest-path services/gateway-rs/Cargo.toml
+          cargo test --manifest-path services/decoder-rs/Cargo.toml
+
   go-quality:
     runs-on: ubuntu-latest
     steps:
@@ -42,7 +47,7 @@ jobs:
 
       - name: Go fmt check
         run: |
-          UNFORMATTED=$(gofmt -l services/api-go services/replay-go)
+          UNFORMATTED=$(gofmt -l services/api-go services/edge-go services/replay-go)
           if [ -n "$UNFORMATTED" ]; then
             echo "Go files need formatting:"
             echo "$UNFORMATTED"
@@ -52,6 +57,11 @@ jobs:
       - name: Go test api-go
         run: |
           cd services/api-go
+          go test ./...
+
+      - name: Go test edge-go
+        run: |
+          cd services/edge-go
           go test ./...
 
       - name: Go test replay-go
@@ -85,5 +95,51 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           cd services/api-go
           "$(go env GOPATH)"/bin/govulncheck ./...
+          cd ../edge-go
+          "$(go env GOPATH)"/bin/govulncheck ./...
           cd ../replay-go
           "$(go env GOPATH)"/bin/govulncheck ./...
+
+  terraform-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Terraform fmt check
+        run: terraform fmt -check -recursive infra/aws/terraform
+
+      - name: Terraform validate
+        run: |
+          cd infra/aws/terraform
+          terraform init -backend=false
+          terraform validate
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build api-go image
+        run: docker build -f services/api-go/Dockerfile -t helios-api:ci .
+
+      - name: Build edge-go image
+        run: docker build -f services/edge-go/Dockerfile -t helios-edge:ci .
+
+      - name: Build gateway-rs image
+        run: docker build -f services/gateway-rs/Dockerfile -t helios-gateway:ci .
+
+      - name: Build decoder-rs image
+        run: docker build -f services/decoder-rs/Dockerfile -t helios-decoder:ci .
+
+      - name: Build replay-go image
+        run: docker build -f services/replay-go/Dockerfile -t helios-replay:ci .
