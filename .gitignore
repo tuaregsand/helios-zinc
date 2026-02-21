@@ -7,3 +7,8 @@
 .vscode
 node_modules
 .cache
+.tools
+infra/aws/terraform/.terraform
+infra/aws/terraform/.terraform.lock.hcl
+infra/aws/terraform/*.tfstate
+infra/aws/terraform/*.tfstate.*

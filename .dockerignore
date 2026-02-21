@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+**/.env
+**/target
+**/*.log
+.cache
+node_modules
+load/k6/results

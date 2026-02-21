@@ -1,0 +1,71 @@
+aws_region  = "us-east-1"
+project     = "helios"
+environment = "prod"
+
+api_image     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/helios-prod-api:latest"
+edge_image    = "123456789012.dkr.ecr.us-east-1.amazonaws.com/helios-prod-edge:latest"
+gateway_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/helios-prod-gateway:latest"
+decoder_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/helios-prod-decoder:latest"
+replay_image  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/helios-prod-replay:latest"
+
+enable_https        = true
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/replace-me"
+
+allowed_ingress_cidrs = ["0.0.0.0/0"]
+
+api_desired_count     = 2
+api_min_count         = 2
+api_max_count         = 12
+edge_desired_count    = 2
+edge_min_count        = 2
+edge_max_count        = 12
+gateway_desired_count = 1
+gateway_min_count     = 1
+gateway_max_count     = 6
+decoder_desired_count = 1
+decoder_min_count     = 1
+decoder_max_count     = 6
+
+cluster = "mainnet-beta"
+
+# Option A: Use AWS-managed MSK (in-house)
+enable_msk          = true
+msk_kafka_version   = "3.6.0"
+msk_broker_count    = 2
+msk_instance_type   = "kafka.m5.large"
+msk_ebs_volume_size = 100
+msk_client_broker   = "PLAINTEXT"
+msk_cloudwatch_logs_enabled = true
+
+# Option B: Use external Kafka (set enable_msk = false)
+# kafka_brokers = "b-1.kafka.example:9092,b-2.kafka.example:9092"
+
+raw_tx_topic  = "helios.raw_tx"
+
+gateway_source                    = "yellowstone"
+gateway_helius_laserstream_endpoint = "https://mainnet.helius-rpc.com/?api-key=replace-me"
+# gateway_yellowstone_endpoint    = "https://your-yellowstone-endpoint:443"
+
+decoder_group  = "helios-decoder"
+clickhouse_url = "https://your-clickhouse-host:8443"
+clickhouse_db  = "helios"
+clickhouse_user = "helios"
+
+api_cors_allow_origins = ["https://app.example.com"]
+
+api_rate_limit_store      = "redis"
+api_rate_limit_redis_addr = "redis.example.internal:6379"
+api_rate_limit_redis_tls  = true
+
+manage_secrets = true
+
+# If manage_secrets=false, provide these ARNs instead.
+# api_pg_dsn_secret_arn                = "arn:aws:secretsmanager:...:secret:..."
+# api_keys_secret_arn                  = "arn:aws:secretsmanager:...:secret:..."
+# api_openapi_token_secret_arn         = "arn:aws:secretsmanager:...:secret:..."
+# api_redis_password_secret_arn        = "arn:aws:secretsmanager:...:secret:..."
+# edge_api_keys_secret_arn             = "arn:aws:secretsmanager:...:secret:..."
+# edge_admin_token_secret_arn          = "arn:aws:secretsmanager:...:secret:..."
+# gateway_yellowstone_x_token_secret_arn = "arn:aws:secretsmanager:...:secret:..."
+# gateway_helius_api_key_secret_arn    = "arn:aws:secretsmanager:...:secret:..."
+# decoder_clickhouse_password_secret_arn = "arn:aws:secretsmanager:...:secret:..."
