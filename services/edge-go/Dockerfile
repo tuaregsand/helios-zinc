@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25.7-alpine AS builder
 WORKDIR /src
 RUN apk add --no-cache ca-certificates git
 COPY services/edge-go/go.mod ./services/edge-go/
