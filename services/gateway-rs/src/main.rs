@@ -519,6 +519,11 @@ fn commitment_to_status(commitment: CommitmentLevel) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rdkafka::consumer::{Consumer, StreamConsumer};
+    use rdkafka::message::Message;
+    use std::env;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tokio::time::{timeout, Instant};
     use yellowstone_grpc_proto::prelude::SubscribeUpdateTransactionInfo;
     use yellowstone_grpc_proto::prost_types::Timestamp;
 
@@ -556,6 +561,31 @@ mod tests {
             log_index: 3,
             write_version: 9,
         }
+    }
+
+    fn integration_enabled() -> bool {
+        matches!(env::var("HELIOS_IT_RUN").as_deref(), Ok("1"))
+    }
+
+    fn integration_kafka_env() -> anyhow::Result<(String, String)> {
+        let brokers = env::var("HELIOS_IT_KAFKA_BROKERS")
+            .context("HELIOS_IT_KAFKA_BROKERS is required when HELIOS_IT_RUN=1")?;
+        let topic = env::var("HELIOS_IT_KAFKA_TOPIC")
+            .context("HELIOS_IT_KAFKA_TOPIC is required when HELIOS_IT_RUN=1")?;
+        if brokers.trim().is_empty() {
+            anyhow::bail!("HELIOS_IT_KAFKA_BROKERS must not be empty");
+        }
+        if topic.trim().is_empty() {
+            anyhow::bail!("HELIOS_IT_KAFKA_TOPIC must not be empty");
+        }
+        Ok((brokers, topic))
+    }
+
+    fn now_millis() -> u128 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock must be after unix epoch")
+            .as_millis()
     }
 
     #[test]
@@ -737,5 +767,81 @@ mod tests {
 
         assert!(envelope.is_none());
         assert_eq!(seq, 0);
+    }
+
+    #[tokio::test]
+    async fn integration_produce_round_trip_with_kafka() -> anyhow::Result<()> {
+        if !integration_enabled() {
+            return Ok(());
+        }
+        let (brokers, topic) = integration_kafka_env()?;
+
+        let producer: FutureProducer = ClientConfig::new()
+            .set("bootstrap.servers", &brokers)
+            .set("message.timeout.ms", "5000")
+            .create()
+            .context("create integration producer")?;
+
+        let consumer_group = format!("helios-gateway-it-{}-{}", std::process::id(), now_millis());
+        let consumer: StreamConsumer = ClientConfig::new()
+            .set("bootstrap.servers", &brokers)
+            .set("group.id", &consumer_group)
+            .set("enable.auto.commit", "false")
+            .set("auto.offset.reset", "latest")
+            .create()
+            .context("create integration consumer")?;
+        consumer
+            .subscribe(&[&topic])
+            .context("subscribe integration consumer")?;
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        let mut key = test_event_key();
+        key.slot = now_millis() as u64;
+        key.parent_slot = key.slot.saturating_sub(1);
+        key.signature = format!("it-{}", key.slot);
+        let envelope = EventEnvelope {
+            event_id_hex: compute_event_id_hex(&key),
+            key,
+            status: "processed".to_string(),
+            block_time_unix_ms: 0,
+            source: "integration".to_string(),
+            source_seq: 1,
+            raw_payload_json: serde_json::json!({"kind":"integration"}),
+        };
+
+        produce(&producer, &topic, &envelope).await?;
+
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut stream = consumer.stream();
+        loop {
+            let wait = deadline.saturating_duration_since(Instant::now());
+            if wait.is_zero() {
+                anyhow::bail!(
+                    "timed out waiting for event_id {} on topic {}",
+                    envelope.event_id_hex,
+                    topic
+                );
+            }
+
+            let message = timeout(wait, stream.next())
+                .await
+                .context("timeout waiting for kafka message")?
+                .ok_or_else(|| anyhow!("consumer stream ended"))?
+                .context("consumer error")?;
+
+            let payload = message
+                .payload()
+                .ok_or_else(|| anyhow!("message payload missing"))?;
+            let decoded: EventEnvelope =
+                serde_json::from_slice(payload).context("decode kafka payload envelope")?;
+            if decoded.event_id_hex == envelope.event_id_hex {
+                assert_eq!(decoded.key.signature, envelope.key.signature);
+                assert_eq!(decoded.status, "processed");
+                break;
+            }
+        }
+
+        Ok(())
     }
 }

@@ -207,11 +207,7 @@ async fn flush_batch(
     consumer: &StreamConsumer,
     rows: &[TxRawRow],
 ) -> anyhow::Result<()> {
-    let mut insert = ch.insert("tx_raw").context("create insert")?;
-    for r in rows {
-        insert.write(r).await?;
-    }
-    insert.end().await?;
+    insert_rows(ch, "tx_raw", rows).await?;
 
     // Commit offsets only after sink success.
     consumer.commit_consumer_state(CommitMode::Async)?;
@@ -219,9 +215,20 @@ async fn flush_batch(
     Ok(())
 }
 
+async fn insert_rows(ch: &Client, table: &str, rows: &[TxRawRow]) -> anyhow::Result<()> {
+    let mut insert = ch.insert(table).context("create insert")?;
+    for r in rows {
+        insert.write(r).await?;
+    }
+    insert.end().await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn test_envelope(event_id_hex: &str, status: &str) -> EventEnvelope {
         EventEnvelope {
@@ -243,6 +250,29 @@ mod tests {
             source_seq: 1,
             raw_payload_json: serde_json::json!({"kind":"transaction"}),
         }
+    }
+
+    fn integration_enabled() -> bool {
+        matches!(env::var("HELIOS_IT_RUN").as_deref(), Ok("1"))
+    }
+
+    fn integration_clickhouse_env() -> anyhow::Result<(String, String, String, String)> {
+        let url = env::var("HELIOS_IT_CLICKHOUSE_URL")
+            .context("HELIOS_IT_CLICKHOUSE_URL is required when HELIOS_IT_RUN=1")?;
+        if url.trim().is_empty() {
+            anyhow::bail!("HELIOS_IT_CLICKHOUSE_URL must not be empty");
+        }
+        let db = env::var("HELIOS_IT_CLICKHOUSE_DB").unwrap_or_else(|_| "default".to_string());
+        let user = env::var("HELIOS_IT_CLICKHOUSE_USER").unwrap_or_else(|_| "default".to_string());
+        let password = env::var("HELIOS_IT_CLICKHOUSE_PASSWORD").unwrap_or_default();
+        Ok((url, db, user, password))
+    }
+
+    fn now_millis() -> u128 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock must be after unix epoch")
+            .as_millis()
     }
 
     #[test]
@@ -337,5 +367,61 @@ mod tests {
     fn args_parse_rejects_invalid_batch_size() {
         let result = Args::try_parse_from(["helios-decoder", "--batch-size", "nope"]);
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn integration_insert_rows_into_clickhouse() -> anyhow::Result<()> {
+        if !integration_enabled() {
+            return Ok(());
+        }
+        let (url, db, user, password) = integration_clickhouse_env()?;
+
+        let ch = Client::default()
+            .with_url(url)
+            .with_database(db)
+            .with_user(user)
+            .with_password(password);
+
+        let table = format!("tx_raw_it_{}_{}", std::process::id(), now_millis());
+        let create_sql = format!(
+            "CREATE TABLE {} (
+                event_id FixedString(32),
+                cluster String,
+                status Int8,
+                slot UInt64,
+                parent_slot UInt64,
+                block_time Nullable(String),
+                signature String,
+                write_version UInt64,
+                tx_index UInt32,
+                raw_payload String
+            ) ENGINE = MergeTree ORDER BY (slot, tx_index, signature)",
+            table
+        );
+        ch.query(&create_sql)
+            .execute()
+            .await
+            .context("create integration table")?;
+
+        let row = envelope_to_row(test_envelope(&"ab".repeat(32), "finalized"))?;
+        insert_rows(&ch, &table, &[row])
+            .await
+            .context("insert integration row")?;
+
+        let count_sql = format!("SELECT count() FROM {}", table);
+        let count: u64 = ch
+            .query(&count_sql)
+            .fetch_one()
+            .await
+            .context("query integration row count")?;
+
+        let drop_sql = format!("DROP TABLE IF EXISTS {}", table);
+        ch.query(&drop_sql)
+            .execute()
+            .await
+            .context("drop integration table")?;
+
+        assert_eq!(count, 1);
+        Ok(())
     }
 }
